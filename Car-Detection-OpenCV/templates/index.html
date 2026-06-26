@@ -5,147 +5,487 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Live vehicle detection dashboard for traffic and parking research, with annotated streaming and occupancy insights.">
   <title>{{ page_title }}</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
   <style>
     :root {
-      --bg: #f4f8fc;
+      --bg: #f4f6f9;
       --surface: #ffffff;
-      --surface-alt: #edf2f7;
-      --text: #1f2937;
-      --muted: #6b7280;
-      --primary: #1d4ed8;
-      --primary-soft: #eff6ff;
-      --accent: #0f766e;
-      --accent-soft: #cffafe;
-      --border: #d1d5db;
-      --shadow: 0 20px 35px rgba(15, 23, 42, 0.08);
+      --surface-alt: #f0f4f8;
+      --text: #111827;
+      --text-muted: #6b7280;
+      --text-light: #9ca3af;
+      --primary: #2563eb;
+      --primary-bg: #eff6ff;
+      --primary-border: #bfdbfe;
+      --primary-text: #1d4ed8;
+      --warning-bg: #fffbeb;
+      --warning-border: #fcd34d;
+      --warning-text: #92400e;
+      --success-bg: #f0fdf4;
+      --success-border: #86efac;
+      --success-text: #166534;
+      --danger: #ef4444;
+      --border: rgba(0,0,0,0.08);
+      --border-strong: rgba(0,0,0,0.13);
+      --radius: 8px;
+      --radius-lg: 12px;
     }
 
-    * { box-sizing: border-box; }
-    body { margin: 0; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); color: var(--text); }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
     a { color: inherit; text-decoration: none; }
 
-    header { background: linear-gradient(135deg, #2563eb 0%, #38bdf8 100%); color: white; padding: 36px 24px; }
-    header .title { max-width: 980px; margin: 0 auto; }
-    header h1 { margin: 0; font-size: clamp(2.1rem, 4vw, 3.4rem); letter-spacing: -0.03em; }
-    header p { margin: 16px 0 0; font-size: 1.05rem; line-height: 1.8; color: rgba(255,255,255,0.88); }
-
-    main { max-width: 1160px; margin: -48px auto 40px; padding: 0 20px; }
-    .grid { display: grid; gap: 24px; }
-    .hero { display: grid; gap: 24px; grid-template-columns: 1.3fr 0.7fr; }
-    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 24px; box-shadow: var(--shadow); overflow: hidden; }
-    .card-header { padding: 24px; border-bottom: 1px solid var(--border); }
-    .card-body { padding: 24px; }
-    .dashboard-pill { display: inline-flex; align-items: center; padding: 8px 14px; margin-bottom: 16px; border-radius: 999px; background: rgba(255,255,255,0.16); color: rgba(255,255,255,0.95); font-size: 0.9rem; letter-spacing: 0.04em; text-transform: uppercase; }
-
-    .controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-bottom: 22px; }
-    .button { display: inline-flex; align-items: center; justify-content: center; min-height: 52px; border-radius: 14px; border: 1px solid transparent; background: var(--primary); color: white; font-weight: 600; transition: transform 0.16s ease, background 0.16s ease, box-shadow 0.16s ease; }
-    .button:hover, .button.active { background: #1e40af; transform: translateY(-1px); box-shadow: 0 12px 30px rgba(99, 102, 241, 0.18); }
-
-    .metric-grid { display: grid; gap: 16px; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 16px; }
-    .metric { background: var(--surface-alt); border: 1px solid var(--border); border-radius: 18px; padding: 24px; }
-    .metric span { display: block; margin-top: 10px; font-size: 2rem; font-weight: 800; color: var(--text); letter-spacing: -0.03em; }
-    .metric-label { font-size: 0.9rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.12em; }
-
-    .stream-frame { width: 100%; height: auto; display: block; border-radius: 20px; border: 1px solid var(--border); background: #000; box-shadow: inset 0 0 0 1px rgba(15,23,42,0.03); }
-    .history { display: grid; gap: 16px; }
-    .history h2 { margin: 0 0 16px; font-size: 1.3rem; }
-    .timeline { list-style: none; padding: 0; margin: 0; }
-    .timeline-item { display: grid; grid-template-columns: auto 1fr; gap: 16px; padding: 16px; background: var(--surface-alt); border-radius: 18px; border: 1px solid var(--border); }
-    .timeline-item small { color: var(--muted); }
-    .timeline-item strong { display: block; margin-bottom: 6px; font-size: 1rem; }
-
-    .status-pill { display: inline-flex; align-items: center; padding: 8px 14px; border-radius: 999px; text-transform: uppercase; letter-spacing: 0.02em; background: var(--accent-soft); color: var(--accent); font-size: 0.92rem; font-weight: 700; }
-    .status-pill.status-empty { background: #f8fafc; color: #475569; }
-    .status-pill.status-partial { background: #eff6ff; color: #1d4ed8; }
-    .status-pill.status-busy { background: #fef3c7; color: #92400e; }
-    .note { margin-top: 18px; color: var(--muted); line-height: 1.7; }
-
-    @media (max-width: 900px) {
-      .hero { grid-template-columns: 1fr; }
-      .metric-grid { grid-template-columns: 1fr; }
-      .controls { grid-template-columns: 1fr; }
+    /* ── Top bar ── */
+    .topbar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 28px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 10;
     }
+    .topbar-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .topbar-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--primary);
+    }
+    .topbar-name {
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+    .live-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 12px;
+      border-radius: 999px;
+      background: #fef2f2;
+      border: 1px solid #fca5a5;
+      color: #b91c1c;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .live-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--danger);
+      animation: blink 1.4s ease-in-out infinite;
+    }
+    @keyframes blink { 0%,100% { opacity:1 } 50% { opacity:.3 } }
+
+    /* ── Page shell ── */
+    .page {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 28px 20px 40px;
+    }
+    .page-header {
+      margin-bottom: 24px;
+    }
+    .page-header h1 {
+      font-size: 22px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      margin-bottom: 4px;
+    }
+    .page-header p {
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+
+    /* ── Layout grid ── */
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr 310px;
+      gap: 16px;
+      align-items: start;
+    }
+    @media (max-width: 820px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+
+    /* ── Cards ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+    .card-head {
+      padding: 15px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .card-head h2 {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .card-head-meta {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .card-body {
+      padding: 20px;
+    }
+
+    /* ── Source tabs ── */
+    .source-tabs {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      margin-bottom: 14px;
+    }
+    .tab-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 9px 0;
+      border-radius: var(--radius);
+      border: 1px solid var(--border-strong);
+      background: var(--surface-alt);
+      color: var(--text-muted);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.14s, border-color 0.14s, color 0.14s, transform 0.1s;
+      font-family: inherit;
+    }
+    .tab-btn i { font-size: 15px; }
+    .tab-btn:hover:not(.active) {
+      background: #e5e7eb;
+      color: var(--text);
+    }
+    .tab-btn:active { transform: scale(0.97); }
+    .tab-btn.active {
+      background: var(--primary-bg);
+      border-color: var(--primary-border);
+      color: var(--primary-text);
+      font-weight: 600;
+    }
+
+    /* ── Stream ── */
+    .stream-shell {
+      position: relative;
+      background: #000;
+      border-radius: var(--radius);
+      overflow: hidden;
+      aspect-ratio: 16 / 9;
+    }
+    .stream-frame {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .stream-overlay {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: rgba(0,0,0,0.55);
+      color: #fff;
+      font-size: 12px;
+      backdrop-filter: blur(4px);
+    }
+    .stream-pulse {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #f87171;
+      animation: blink 1.4s ease-in-out infinite;
+    }
+
+    /* ── Note bar ── */
+    .note-bar {
+      margin-top: 12px;
+      padding: 10px 14px;
+      background: var(--surface-alt);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+    }
+    .note-bar i {
+      font-size: 15px;
+      color: var(--text-light);
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+    .note-bar p {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+
+    /* ── Sidebar metrics ── */
+    .metrics-col {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .metric-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 16px 18px;
+    }
+    .metric-label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+    }
+    .metric-label i { font-size: 14px; }
+    .metric-value {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: -0.03em;
+      line-height: 1;
+    }
+    .metric-sub {
+      font-size: 12px;
+      color: var(--text-light);
+      margin-top: 6px;
+    }
+
+    /* ── Status badge ── */
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 600;
+      border: 1px solid;
+    }
+    .status-badge .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+    }
+    .status-empty {
+      background: var(--surface-alt);
+      border-color: var(--border-strong);
+      color: var(--text-muted);
+    }
+    .status-empty .dot { background: var(--text-light); }
+    .status-partial {
+      background: var(--primary-bg);
+      border-color: var(--primary-border);
+      color: var(--primary-text);
+    }
+    .status-partial .dot { background: var(--primary); }
+    .status-busy {
+      background: var(--warning-bg);
+      border-color: var(--warning-border);
+      color: var(--warning-text);
+    }
+    .status-busy .dot { background: #f59e0b; }
+
+    /* ── Activity log ── */
+    .log-list {
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .log-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 8px;
+      border-radius: var(--radius);
+      transition: background 0.12s;
+    }
+    .log-item:hover { background: var(--surface-alt); }
+    .log-icon {
+      width: 30px;
+      height: 30px;
+      border-radius: var(--radius);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      font-size: 14px;
+    }
+    .log-icon.ready { background: var(--success-bg); color: var(--success-text); }
+    .log-icon.source { background: var(--primary-bg); color: var(--primary-text); }
+    .log-icon.status { background: var(--warning-bg); color: var(--warning-text); }
+    .log-text { flex: 1; min-width: 0; }
+    .log-text strong { display: block; font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 2px; }
+    .log-text small { font-size: 11px; color: var(--text-muted); }
+    .log-time { font-size: 11px; color: var(--text-light); flex-shrink: 0; padding-top: 1px; }
   </style>
 </head>
 <body>
-  <header>
-    <div class="title">
-      <span class="dashboard-pill">Live Research UI</span>
-      <h1>Vehicle Detection Dashboard</h1>
-      <p>Precise vehicle detection with live occupancy analytics for parking, traffic, and webcam research streams.</p>
-    </div>
-  </header>
 
-  <main>
-    <div class="grid hero">
+  <!-- Top nav -->
+  <nav class="topbar">
+    <div class="topbar-logo">
+      <div class="topbar-dot"></div>
+      <span class="topbar-name">Vehicle Detection · Research</span>
+    </div>
+    <div class="live-badge">
+      <div class="live-dot"></div>
+      Live
+    </div>
+  </nav>
+
+  <!-- Page -->
+  <main class="page">
+    <div class="page-header">
+      <h1>Traffic dashboard</h1>
+      <p>Annotated video streams with real-time occupancy analytics for parking and traffic research.</p>
+    </div>
+
+    <div class="layout">
+
+      <!-- Left: stream card -->
       <section class="card">
-        <div class="card-header">
+        <div class="card-head">
           <h2>Live stream</h2>
-          <p style="margin: 8px 0 0; color: var(--muted);">Select a source and watch the annotated video feed with detected vehicles.</p>
+          <span class="card-head-meta" id="active-source-label">Source: video</span>
         </div>
         <div class="card-body">
-          <div class="controls">
-            <a class="button active" id="video-btn" href="#">Video source</a>
-            <a class="button" id="parking-btn" href="#">Parking lot</a>
-            <a class="button" id="traffic-btn" href="#">Traffic source</a>
-            <a class="button" id="camera-btn" href="#">Webcam source</a>
+          <div class="source-tabs">
+            <button class="tab-btn active" id="video-btn" data-src="video">
+              <i class="ti ti-video"></i> Video
+            </button>
+            <button class="tab-btn" id="parking-btn" data-src="parking">
+              <i class="ti ti-parking"></i> Parking
+            </button>
+            <button class="tab-btn" id="traffic-btn" data-src="traffic">
+              <i class="ti ti-road"></i> Traffic
+            </button>
+            <button class="tab-btn" id="camera-btn" data-src="camera">
+              <i class="ti ti-camera"></i> Webcam
+            </button>
           </div>
-          <img class="stream-frame" id="stream" src="/video_feed?src=video" alt="Car detection stream">
-          <p class="note">Use the buttons above to switch source. If the parking lot video is available, the dashboard will automatically show a more sensitive detection mode for small vehicles.</p>
+
+          <div class="stream-shell">
+            <img class="stream-frame" id="stream" src="/video_feed?src=video" alt="Car detection stream">
+            <div class="stream-overlay">
+              <div class="stream-pulse"></div>
+              <span id="stream-label">Streaming video</span>
+            </div>
+          </div>
+
+          <div class="note-bar">
+            <i class="ti ti-info-circle"></i>
+            <p>Use the buttons above to switch source. If the parking lot video is available, the dashboard will automatically show a more sensitive detection mode for small vehicles.</p>
+          </div>
         </div>
       </section>
 
-      <section class="card">
-        <div class="card-header">
-          <h2>Current metrics</h2>
+      <!-- Right: metrics + log -->
+      <div class="metrics-col">
+
+        <div class="metric-card">
+          <div class="metric-label"><i class="ti ti-antenna"></i> Active source</div>
+          <div class="metric-value" id="source-label">video</div>
+          <div class="metric-sub" id="mode-sub">Detection mode: standard</div>
         </div>
-        <div class="card-body">
-          <div class="metric-grid">
-            <div class="metric">
-              <div class="metric-label">Active source</div>
-              <span id="source-label">video</span>
-            </div>
-            <div class="metric">
-              <div class="metric-label">Vehicles detected</div>
-              <span id="car-count">0</span>
-            </div>
-            <div class="metric">
-              <div class="metric-label">Occupancy status</div>
-              <span class="status-pill status-empty" id="status-label">Waiting</span>
+
+        <div class="metric-card">
+          <div class="metric-label"><i class="ti ti-car"></i> Vehicles detected</div>
+          <div class="metric-value" id="car-count">0</div>
+          <div class="metric-sub">Updated every 700 ms</div>
+        </div>
+
+        <div class="metric-card">
+          <div class="metric-label"><i class="ti ti-map-pin"></i> Occupancy status</div>
+          <div id="status-badge" class="status-badge status-empty">
+            <div class="dot"></div>
+            <span id="status-label">Waiting</span>
+          </div>
+          <div class="metric-sub" id="occ-sub">Awaiting first frame</div>
+        </div>
+
+        <!-- Activity log -->
+        <section class="card">
+          <div class="card-head">
+            <h2>Activity log</h2>
+            <span class="card-head-meta" id="log-count">0 events</span>
+          </div>
+          <div id="history-list" class="log-list">
+            <div class="log-item">
+              <div class="log-icon ready"><i class="ti ti-check"></i></div>
+              <div class="log-text">
+                <strong>Dashboard ready</strong>
+                <small>Waiting for the first frame to load.</small>
+              </div>
+              <span class="log-time">now</span>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
+
+      </div>
     </div>
-
-    <section class="card history">
-      <div class="card-header">
-        <h2>Detection history</h2>
-        <p style="margin: 8px 0 0; color: var(--muted);">Recent changes in source, occupancy state, and counts are recorded here for quick review.</p>
-      </div>
-      <div class="card-body">
-        <ul class="timeline" id="history-list">
-          <li class="timeline-item"><strong>Dashboard ready</strong><small>Waiting for the first frame to load.</small></li>
-        </ul>
-      </div>
-    </section>
   </main>
 
   <script>
-    const stream = document.getElementById('stream');
+    const stream      = document.getElementById('stream');
     const sourceLabel = document.getElementById('source-label');
-    const carCount = document.getElementById('car-count');
+    const carCount    = document.getElementById('car-count');
+    const statusBadge = document.getElementById('status-badge');
     const statusLabel = document.getElementById('status-label');
     const historyList = document.getElementById('history-list');
+    const logCount    = document.getElementById('log-count');
+    const activeSourceLabel = document.getElementById('active-source-label');
+    const streamLabel = document.getElementById('stream-label');
+    const modeSub     = document.getElementById('mode-sub');
+    const occSub      = document.getElementById('occ-sub');
+
     const buttons = {
-      video: document.getElementById('video-btn'),
+      video:   document.getElementById('video-btn'),
       parking: document.getElementById('parking-btn'),
       traffic: document.getElementById('traffic-btn'),
-      camera: document.getElementById('camera-btn'),
+      camera:  document.getElementById('camera-btn'),
     };
 
+    const modeLabels = { video: 'standard', parking: 'sensitive', traffic: 'standard', camera: 'standard' };
+
     let currentSource = 'video';
-    let latestStatus = 'Waiting';
+    let latestStatus  = 'Waiting';
+    let eventCount    = 0;
 
     function setActiveButton(source) {
       Object.keys(buttons).forEach(key => {
@@ -157,15 +497,57 @@
       currentSource = source;
       stream.src = `/video_feed?src=${source}`;
       sourceLabel.textContent = source;
+      activeSourceLabel.textContent = `Source: ${source}`;
+      streamLabel.textContent = `Streaming ${source}`;
+      modeSub.textContent = `Detection mode: ${modeLabels[source] || 'standard'}`;
       setActiveButton(source);
-      addHistory(`Source switched to ${source}`, `Now streaming the ${source} feed.`);
+      addHistory(`Source → ${source}`, `Now streaming the ${source} feed.`, 'source');
     }
 
-    function addHistory(title, description) {
-      const item = document.createElement('li');
-      item.className = 'timeline-item';
-      item.innerHTML = `<strong>${title}</strong><small>${description}</small>`;
-      historyList.prepend(item);
+    function setStatus(status, count) {
+      statusBadge.className = 'status-badge';
+      if (status === 'Empty lot') {
+        statusBadge.classList.add('status-empty');
+        occSub.textContent = 'No vehicles present';
+      } else if (status === 'Partially occupied') {
+        statusBadge.classList.add('status-partial');
+        occSub.textContent = `${count} vehicle${count !== 1 ? 's' : ''} detected`;
+      } else if (status === 'Waiting') {
+        statusBadge.classList.add('status-empty');
+        occSub.textContent = 'Awaiting first frame';
+      } else {
+        statusBadge.classList.add('status-busy');
+        occSub.textContent = `High density — ${count} vehicles`;
+      }
+      statusLabel.textContent = status;
+    }
+
+    function timeLabel() {
+      return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+
+    function addHistory(title, description, type) {
+      eventCount++;
+      logCount.textContent = `${eventCount} event${eventCount !== 1 ? 's' : ''}`;
+
+      const iconMap = {
+        ready:  { cls: 'ready',  icon: 'ti-check' },
+        source: { cls: 'source', icon: 'ti-switch-horizontal' },
+        status: { cls: 'status', icon: 'ti-alert-circle' },
+      };
+      const { cls, icon } = iconMap[type] || iconMap.status;
+
+      const item = document.createElement('div');
+      item.className = 'log-item';
+      item.innerHTML = `
+        <div class="log-icon ${cls}"><i class="ti ${icon}"></i></div>
+        <div class="log-text">
+          <strong>${title}</strong>
+          <small>${description}</small>
+        </div>
+        <span class="log-time">${timeLabel()}</span>`;
+
+      historyList.insertBefore(item, historyList.firstChild);
       if (historyList.children.length > 8) {
         historyList.removeChild(historyList.lastChild);
       }
@@ -176,31 +558,34 @@
         const response = await fetch('/stats');
         if (!response.ok) return;
         const data = await response.json();
+
         if (data.source !== currentSource) {
           currentSource = data.source;
           setActiveButton(data.source);
         }
+
         sourceLabel.textContent = data.source;
+        activeSourceLabel.textContent = `Source: ${data.source}`;
         carCount.textContent = data.count;
-        statusLabel.textContent = data.status;
-        statusLabel.className = `status-pill ${data.status === 'Empty lot' ? 'status-empty' : data.status === 'Partially occupied' ? 'status-partial' : 'status-busy'}`;
+
         if (data.status !== latestStatus) {
           latestStatus = data.status;
-          addHistory(`Status changed`, `Detected ${data.count} vehicles — ${data.status}.`);
+          setStatus(data.status, data.count);
+          addHistory('Status changed', `Detected ${data.count} vehicle${data.count !== 1 ? 's' : ''} — ${data.status}.`, 'status');
         }
       } catch (err) {
         console.error('Stats update failed', err);
       }
     }
 
+    // Wire up buttons
     Object.entries(buttons).forEach(([source, button]) => {
-      button.addEventListener('click', (event) => {
-        event.preventDefault();
-        updateFeed(source);
-      });
+      button.addEventListener('click', () => updateFeed(source));
     });
 
+    // Poll stats
     setInterval(refreshStats, 700);
   </script>
+
 </body>
 </html>

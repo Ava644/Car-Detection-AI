@@ -13,19 +13,70 @@ VIDEO_SOURCES = {
 }
 CASCADE_PATH = 'haarcascade_cars.xml'
 
+# Map of parking slots for sources that support slot tracking. Placeholder
+# coordinates (x1, y1, x2, y2) for each slot; user will adjust later.
+PARKING_SLOTS = {
+    'parking': [
+        {'id': 1, 'box': (50, 100, 150, 200)},
+        {'id': 2, 'box': (160, 100, 260, 200)},
+        {'id': 3, 'box': (270, 100, 370, 200)},
+        {'id': 4, 'box': (380, 100, 480, 200)},
+    ]
+}
 stats_lock = threading.Lock()
 detection_stats = {
     'source': 'video',
     'count': 0,
     'status': 'Waiting',
+    'slots': [],
+    'total': 0,
+    'occupied': 0,
+    'vacant': 0,
 }
 
 
-def update_stats(source, count):
+def compute_slot_status(source_key, car_boxes):
+    slots = PARKING_SLOTS.get(source_key)
+    if not slots:
+        return []
+
+    results = []
+    for slot in slots:
+        x1, y1, x2, y2 = slot['box']
+        slot_area = max(0, x2 - x1) * max(0, y2 - y1)
+        occupied = False
+
+        for (cx, cy, cw, ch) in car_boxes:
+            cx1, cy1, cx2, cy2 = int(cx), int(cy), int(cx + cw), int(cy + ch)
+            ix1 = max(x1, cx1)
+            iy1 = max(y1, cy1)
+            ix2 = min(x2, cx2)
+            iy2 = min(y2, cy2)
+            if ix2 > ix1 and iy2 > iy1 and slot_area > 0:
+                inter = (ix2 - ix1) * (iy2 - iy1)
+                if (inter / float(slot_area)) > 0.3:
+                    occupied = True
+                    break
+
+        results.append({'id': slot['id'], 'status': 'Occupied' if occupied else 'Vacant'})
+
+    return results
+
+
+def update_stats(source, count, car_boxes):
     with stats_lock:
         detection_stats['source'] = source
         detection_stats['count'] = count
         detection_stats['status'] = get_status_label(count)
+
+        slots = compute_slot_status(source, car_boxes)
+        detection_stats['slots'] = slots
+        total = len(slots)
+        occupied = sum(1 for s in slots if s.get('status') == 'Occupied')
+        vacant = total - occupied
+        detection_stats['total'] = total
+        detection_stats['occupied'] = occupied
+        detection_stats['vacant'] = vacant
 
 
 def get_stats():
@@ -78,7 +129,7 @@ def generate_frames(source_key):
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         cars = car_cascade.detectMultiScale(gray, **detect_params)
         count = len(cars)
-        update_stats(source_key, count)
+        update_stats(source_key, count, cars)
 
         for (x, y, w, h) in cars:
             cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
