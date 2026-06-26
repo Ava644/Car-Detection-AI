@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Live vehicle detection dashboard for traffic and parking research, with annotated streaming and occupancy insights.">
+  <title>{{ page_title }}</title>
+  <style>
+    :root {
+      --bg: #f4f8fc;
+      --surface: #ffffff;
+      --surface-alt: #edf2f7;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --primary: #1d4ed8;
+      --primary-soft: #eff6ff;
+      --accent: #0f766e;
+      --accent-soft: #cffafe;
+      --border: #d1d5db;
+      --shadow: 0 20px 35px rgba(15, 23, 42, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); color: var(--text); }
+    a { color: inherit; text-decoration: none; }
+
+    header { background: linear-gradient(135deg, #2563eb 0%, #38bdf8 100%); color: white; padding: 36px 24px; }
+    header .title { max-width: 980px; margin: 0 auto; }
+    header h1 { margin: 0; font-size: clamp(2.1rem, 4vw, 3.4rem); letter-spacing: -0.03em; }
+    header p { margin: 16px 0 0; font-size: 1.05rem; line-height: 1.8; color: rgba(255,255,255,0.88); }
+
+    main { max-width: 1160px; margin: -48px auto 40px; padding: 0 20px; }
+    .grid { display: grid; gap: 24px; }
+    .hero { display: grid; gap: 24px; grid-template-columns: 1.3fr 0.7fr; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 24px; box-shadow: var(--shadow); overflow: hidden; }
+    .card-header { padding: 24px; border-bottom: 1px solid var(--border); }
+    .card-body { padding: 24px; }
+    .dashboard-pill { display: inline-flex; align-items: center; padding: 8px 14px; margin-bottom: 16px; border-radius: 999px; background: rgba(255,255,255,0.16); color: rgba(255,255,255,0.95); font-size: 0.9rem; letter-spacing: 0.04em; text-transform: uppercase; }
+
+    .controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-bottom: 22px; }
+    .button { display: inline-flex; align-items: center; justify-content: center; min-height: 52px; border-radius: 14px; border: 1px solid transparent; background: var(--primary); color: white; font-weight: 600; transition: transform 0.16s ease, background 0.16s ease, box-shadow 0.16s ease; }
+    .button:hover, .button.active { background: #1e40af; transform: translateY(-1px); box-shadow: 0 12px 30px rgba(99, 102, 241, 0.18); }
+
+    .metric-grid { display: grid; gap: 16px; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 16px; }
+    .metric { background: var(--surface-alt); border: 1px solid var(--border); border-radius: 18px; padding: 24px; }
+    .metric span { display: block; margin-top: 10px; font-size: 2rem; font-weight: 800; color: var(--text); letter-spacing: -0.03em; }
+    .metric-label { font-size: 0.9rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.12em; }
+
+    .stream-frame { width: 100%; height: auto; display: block; border-radius: 20px; border: 1px solid var(--border); background: #000; box-shadow: inset 0 0 0 1px rgba(15,23,42,0.03); }
+    .history { display: grid; gap: 16px; }
+    .history h2 { margin: 0 0 16px; font-size: 1.3rem; }
+    .timeline { list-style: none; padding: 0; margin: 0; }
+    .timeline-item { display: grid; grid-template-columns: auto 1fr; gap: 16px; padding: 16px; background: var(--surface-alt); border-radius: 18px; border: 1px solid var(--border); }
+    .timeline-item small { color: var(--muted); }
+    .timeline-item strong { display: block; margin-bottom: 6px; font-size: 1rem; }
+
+    .status-pill { display: inline-flex; align-items: center; padding: 8px 14px; border-radius: 999px; text-transform: uppercase; letter-spacing: 0.02em; background: var(--accent-soft); color: var(--accent); font-size: 0.92rem; font-weight: 700; }
+    .status-pill.status-empty { background: #f8fafc; color: #475569; }
+    .status-pill.status-partial { background: #eff6ff; color: #1d4ed8; }
+    .status-pill.status-busy { background: #fef3c7; color: #92400e; }
+    .note { margin-top: 18px; color: var(--muted); line-height: 1.7; }
+
+    @media (max-width: 900px) {
+      .hero { grid-template-columns: 1fr; }
+      .metric-grid { grid-template-columns: 1fr; }
+      .controls { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="title">
+      <span class="dashboard-pill">Live Research UI</span>
+      <h1>Vehicle Detection Dashboard</h1>
+      <p>Precise vehicle detection with live occupancy analytics for parking, traffic, and webcam research streams.</p>
+    </div>
+  </header>
+
+  <main>
+    <div class="grid hero">
+      <section class="card">
+        <div class="card-header">
+          <h2>Live stream</h2>
+          <p style="margin: 8px 0 0; color: var(--muted);">Select a source and watch the annotated video feed with detected vehicles.</p>
+        </div>
+        <div class="card-body">
+          <div class="controls">
+            <a class="button active" id="video-btn" href="#">Video source</a>
+            <a class="button" id="parking-btn" href="#">Parking lot</a>
+            <a class="button" id="traffic-btn" href="#">Traffic source</a>
+            <a class="button" id="camera-btn" href="#">Webcam source</a>
+          </div>
+          <img class="stream-frame" id="stream" src="/video_feed?src=video" alt="Car detection stream">
+          <p class="note">Use the buttons above to switch source. If the parking lot video is available, the dashboard will automatically show a more sensitive detection mode for small vehicles.</p>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-header">
+          <h2>Current metrics</h2>
+        </div>
+        <div class="card-body">
+          <div class="metric-grid">
+            <div class="metric">
+              <div class="metric-label">Active source</div>
+              <span id="source-label">video</span>
+            </div>
+            <div class="metric">
+              <div class="metric-label">Vehicles detected</div>
+              <span id="car-count">0</span>
+            </div>
+            <div class="metric">
+              <div class="metric-label">Occupancy status</div>
+              <span class="status-pill status-empty" id="status-label">Waiting</span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <section class="card history">
+      <div class="card-header">
+        <h2>Detection history</h2>
+        <p style="margin: 8px 0 0; color: var(--muted);">Recent changes in source, occupancy state, and counts are recorded here for quick review.</p>
+      </div>
+      <div class="card-body">
+        <ul class="timeline" id="history-list">
+          <li class="timeline-item"><strong>Dashboard ready</strong><small>Waiting for the first frame to load.</small></li>
+        </ul>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const stream = document.getElementById('stream');
+    const sourceLabel = document.getElementById('source-label');
+    const carCount = document.getElementById('car-count');
+    const statusLabel = document.getElementById('status-label');
+    const historyList = document.getElementById('history-list');
+    const buttons = {
+      video: document.getElementById('video-btn'),
+      parking: document.getElementById('parking-btn'),
+      traffic: document.getElementById('traffic-btn'),
+      camera: document.getElementById('camera-btn'),
+    };
+
+    let currentSource = 'video';
+    let latestStatus = 'Waiting';
+
+    function setActiveButton(source) {
+      Object.keys(buttons).forEach(key => {
+        buttons[key].classList.toggle('active', key === source);
+      });
+    }
+
+    function updateFeed(source) {
+      currentSource = source;
+      stream.src = `/video_feed?src=${source}`;
+      sourceLabel.textContent = source;
+      setActiveButton(source);
+      addHistory(`Source switched to ${source}`, `Now streaming the ${source} feed.`);
+    }
+
+    function addHistory(title, description) {
+      const item = document.createElement('li');
+      item.className = 'timeline-item';
+      item.innerHTML = `<strong>${title}</strong><small>${description}</small>`;
+      historyList.prepend(item);
+      if (historyList.children.length > 8) {
+        historyList.removeChild(historyList.lastChild);
+      }
+    }
+
+    async function refreshStats() {
+      try {
+        const response = await fetch('/stats');
+        if (!response.ok) return;
+        const data = await response.json();
+        if (data.source !== currentSource) {
+          currentSource = data.source;
+          setActiveButton(data.source);
+        }
+        sourceLabel.textContent = data.source;
+        carCount.textContent = data.count;
+        statusLabel.textContent = data.status;
+        statusLabel.className = `status-pill ${data.status === 'Empty lot' ? 'status-empty' : data.status === 'Partially occupied' ? 'status-partial' : 'status-busy'}`;
+        if (data.status !== latestStatus) {
+          latestStatus = data.status;
+          addHistory(`Status changed`, `Detected ${data.count} vehicles — ${data.status}.`);
+        }
+      } catch (err) {
+        console.error('Stats update failed', err);
+      }
+    }
+
+    Object.entries(buttons).forEach(([source, button]) => {
+      button.addEventListener('click', (event) => {
+        event.preventDefault();
+        updateFeed(source);
+      });
+    });
+
+    setInterval(refreshStats, 700);
+  </script>
+</body>
+</html>
