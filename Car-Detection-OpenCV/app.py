@@ -1,17 +1,20 @@
-import cv2
 import os
 import threading
+import time
+
+import cv2
 from flask import Flask, Response, jsonify, render_template, request
 
 app = Flask(__name__)
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CAMERA_SOURCE = 0
 VIDEO_SOURCES = {
-    'video': 'cars.mp4',
-    'parking': 'parking_lot.mp4',
-    'traffic': 'traffic.mp4',
+    'video': os.path.join(BASE_DIR, 'cars.mp4'),
+    'parking': os.path.join(BASE_DIR, 'parking_lot.mp4'),
+    'traffic': os.path.join(BASE_DIR, 'traffic.mp4'),
 }
-CASCADE_PATH = 'haarcascade_cars.xml'
+CASCADE_PATH = os.path.join(BASE_DIR, 'haarcascade_cars.xml')
 
 # Map of parking slots for sources that support slot tracking. Placeholder
 # coordinates (x1, y1, x2, y2) for each slot; user will adjust later.
@@ -35,7 +38,7 @@ detection_stats = {
 }
 
 
-def compute_slot_status(source_key, car_boxes):
+def compute_slot_status(source_key, car_boxes, scale=1.0):
     slots = PARKING_SLOTS.get(source_key)
     if not slots:
         return []
@@ -43,6 +46,11 @@ def compute_slot_status(source_key, car_boxes):
     results = []
     for slot in slots:
         x1, y1, x2, y2 = slot['box']
+        if scale != 1.0:
+            x1 = int(x1 * scale)
+            y1 = int(y1 * scale)
+            x2 = int(x2 * scale)
+            y2 = int(y2 * scale)
         slot_area = max(0, x2 - x1) * max(0, y2 - y1)
         occupied = False
 
@@ -63,13 +71,13 @@ def compute_slot_status(source_key, car_boxes):
     return results
 
 
-def update_stats(source, count, car_boxes):
+def update_stats(source, count, car_boxes, scale=1.0):
     with stats_lock:
         detection_stats['source'] = source
         detection_stats['count'] = count
         detection_stats['status'] = get_status_label(count)
 
-        slots = compute_slot_status(source, car_boxes)
+        slots = compute_slot_status(source, car_boxes, scale=scale)
         detection_stats['slots'] = slots
         total = len(slots)
         occupied = sum(1 for s in slots if s.get('status') == 'Occupied')
@@ -100,10 +108,30 @@ def get_source_path(source_key):
 
 def get_detection_params(source_key):
     if source_key == 'parking':
-        return {'scaleFactor': 1.05, 'minNeighbors': 4, 'minSize': (20, 20)}
+        return {'scaleFactor': 1.02, 'minNeighbors': 2, 'minSize': (24, 24), 'maxSize': (220, 220)}
     if source_key == 'traffic':
-        return {'scaleFactor': 1.1, 'minNeighbors': 4, 'minSize': (40, 40)}
-    return {'scaleFactor': 1.08, 'minNeighbors': 3, 'minSize': (30, 30)}
+        return {'scaleFactor': 1.05, 'minNeighbors': 4, 'minSize': (35, 35), 'maxSize': (220, 220)}
+    return {'scaleFactor': 1.06, 'minNeighbors': 3, 'minSize': (30, 30), 'maxSize': (220, 220)}
+
+
+def get_stream_settings(source_key):
+    if source_key == 'parking':
+        return {'process_every': 2, 'max_width': 960, 'jpeg_quality': 60}
+    if source_key == 'traffic':
+        return {'process_every': 2, 'max_width': 720, 'jpeg_quality': 60}
+    return {'process_every': 2, 'max_width': 720, 'jpeg_quality': 65}
+
+
+def resize_for_stream(frame, source_key):
+    height, width = frame.shape[:2]
+    settings = get_stream_settings(source_key)
+    max_width = settings['max_width']
+    scale = min(1.0, max_width / float(width))
+    if scale < 1.0:
+        resized = cv2.resize(frame, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+    else:
+        resized = frame
+    return resized, scale
 
 
 def generate_frames(source_key):
@@ -120,27 +148,64 @@ def generate_frames(source_key):
         raise RuntimeError(f'Cannot load cascade: {CASCADE_PATH}')
 
     detect_params = get_detection_params(source_key)
+    stream_settings = get_stream_settings(source_key)
+    process_every = stream_settings['process_every']
+    frame_counter = 0
+    back_subtractor = None
+    if source_key == 'parking':
+        back_subtractor = cv2.createBackgroundSubtractorMOG2(history=180, varThreshold=35, detectShadows=False)
 
     while True:
         success, frame = cap.read()
         if not success or frame is None:
-            break
+            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            continue
 
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        cars = car_cascade.detectMultiScale(gray, **detect_params)
+        frame_counter += 1
+        if frame_counter % process_every != 0:
+            continue
+
+        display_frame, scale = resize_for_stream(frame, source_key)
+        if source_key == 'parking' and back_subtractor is not None:
+            gray = cv2.cvtColor(display_frame, cv2.COLOR_BGR2GRAY)
+            gray = cv2.GaussianBlur(gray, (5, 5), 0)
+            fg_mask = back_subtractor.apply(gray)
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+            fg_mask = cv2.morphologyEx(fg_mask, cv2.MORPH_OPEN, kernel)
+            fg_mask = cv2.dilate(fg_mask, kernel, iterations=1)
+
+            contours, _ = cv2.findContours(fg_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            cars = []
+            for contour in contours:
+                x, y, w, h = cv2.boundingRect(contour)
+                area = w * h
+                if area < 400 or w < 24 or h < 24:
+                    continue
+                cars.append((x, y, w, h))
+        else:
+            gray = cv2.cvtColor(display_frame, cv2.COLOR_BGR2GRAY)
+            gray = cv2.GaussianBlur(gray, (5, 5), 0)
+            gray = cv2.equalizeHist(gray)
+            cars = car_cascade.detectMultiScale(gray, **detect_params)
+
         count = len(cars)
-        update_stats(source_key, count, cars)
+        update_stats(source_key, count, cars, scale=scale)
 
         for (x, y, w, h) in cars:
-            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+            cv2.rectangle(display_frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
 
-        ret, buffer = cv2.imencode('.jpg', frame)
+        ret, buffer = cv2.imencode(
+            '.jpg',
+            display_frame,
+            [cv2.IMWRITE_JPEG_QUALITY, stream_settings['jpeg_quality']],
+        )
         if not ret:
             continue
 
         frame_bytes = buffer.tobytes()
         yield (b'--frame\r\n'
                b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+        time.sleep(0.03)
 
     cap.release()
 
@@ -168,4 +233,4 @@ def stats():
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)
